@@ -91,9 +91,14 @@ static void pio_irq0(PIO pio) {
     // Call handler if it is registered, for StateMachine irqs.
     for (size_t i = 0; i < 4; ++i) {
         rp2_state_machine_irq_obj_t *irq = MP_STATE_PORT(rp2_state_machine_irq_obj[PIO_NUM(pio) * 4 + i]);
-        if (irq != NULL && ((ints >> (8 + i)) & irq->trigger)) {
-            irq->flags = 1;
-            mp_irq_handler(&irq->base);
+        if (irq != NULL) {
+            uint32_t triggered = ints & irq->trigger;
+            if (triggered) {
+                irq->flags = (triggered & 0x00f ? 2 : 0) |
+                             (triggered & 0x0f0 ? 4 : 0) |
+                             (triggered & 0xf00 ? 1 : 0);
+                mp_irq_handler(&irq->base);
+            }
         }
     }
 }
@@ -864,13 +869,16 @@ static mp_obj_t rp2_state_machine_irq(size_t n_args, const mp_obj_t *pos_args, m
         irq->base.handler = args[ARG_handler].u_obj;
         irq->base.ishard = args[ARG_hard].u_bool;
         irq->flags = 0;
-        irq->trigger = args[ARG_trigger].u_int;
 
-        // Enable IRQ if a handler is given.
-        if (args[ARG_handler].u_obj == mp_const_none) {
-            self->pio->inte0 &= ~(1 << (8 + self->sm));
-        } else {
-            self->pio->inte0 |= 1 << (8 + self->sm);
+        mp_int_t trigger = args[ARG_trigger].u_int;
+        
+        irq->trigger = (((trigger & 2) ? 0x001 : 0) |
+                        ((trigger & 4) ? 0x010 : 0) |
+                        ((trigger & 1) ? 0x100 : 0)) << self->sm;
+
+        self->pio->inte0 &= ~(0x111 << self->sm);
+        if (args[ARG_handler].u_obj != mp_const_none) {
+            self->pio->inte0 |= irq->trigger;
         }
 
         if (self->pio->inte0) {
