@@ -344,7 +344,29 @@ static mp_obj_t rp2_pio_state_machine(size_t n_args, const mp_obj_t *pos_args, m
 }
 MP_DEFINE_CONST_FUN_OBJ_KW(rp2_pio_state_machine_obj, 2, rp2_pio_state_machine);
 
-// PIO.irq(handler=None, trigger=IRQ_SM0|IRQ_SM1|IRQ_SM2|IRQ_SM3, hard=False)
+// Configure the given PIO's interrupt-enable register, taking account of
+// any registered PIO-level ISR and all the SM-level ISRs.
+static void pio_configure_inte(PIO pio) {
+    uint32_t mask = 0;
+    
+    rp2_pio_irq_obj_t *pio_irq = MP_STATE_PORT(rp2_pio_irq_obj[PIO_NUM(pio)]);
+    if (pio_irq != NULL && pio_irq->base.handler != mp_const_none) {
+        mask |= pio_irq->trigger;
+    }
+
+    for (size_t i = 0; i < 4; i++) {
+        rp2_state_machine_irq_obj_t *irq = MP_STATE_PORT(rp2_state_machine_irq_obj[PIO_NUM(pio) * 4 + i]);
+        if (irq != NULL && irq->base.handler != mp_const_none) {
+            mask |= irq->trigger;
+        }
+    }
+
+    // Enable IRQ if a handler is given.
+    pio->inte0 = mask;
+    irq_set_enabled(rp2_state_machine_obj[PIO_NUM(pio)].irq, mask != 0);
+}
+
+// PIO.irq(handler=None, trigger=IRQ_SMx|IRQ_SMx_TXNFULL|IRQ_SMx_RXNEMPTY, hard=False)
 static mp_obj_t rp2_pio_irq(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_handler, ARG_trigger, ARG_hard };
     static const mp_arg_t allowed_args[] = {
@@ -384,11 +406,7 @@ static mp_obj_t rp2_pio_irq(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
         irq->flags = 0;
         irq->trigger = args[ARG_trigger].u_int;
 
-        // Enable IRQ if a handler is given.
-        if (args[ARG_handler].u_obj != mp_const_none) {
-            self->pio->inte0 = irq->trigger;
-            irq_set_enabled(self->irq, true);
-        }
+        pio_configure_inte(self->pio);
     }
 
     return MP_OBJ_FROM_PTR(irq);
@@ -417,6 +435,16 @@ static const mp_rom_map_elem_t rp2_pio_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_IRQ_SM1), MP_ROM_INT(0x200) },
     { MP_ROM_QSTR(MP_QSTR_IRQ_SM2), MP_ROM_INT(0x400) },
     { MP_ROM_QSTR(MP_QSTR_IRQ_SM3), MP_ROM_INT(0x800) },
+
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM0_TXNFULL), MP_ROM_INT(0x010) },
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM1_TXNFULL), MP_ROM_INT(0x020) },
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM2_TXNFULL), MP_ROM_INT(0x040) },
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM3_TXNFULL), MP_ROM_INT(0x080) },
+
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM0_RXNEMPTY), MP_ROM_INT(0x001) },
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM1_RXNEMPTY), MP_ROM_INT(0x002) },
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM2_RXNEMPTY), MP_ROM_INT(0x004) },
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM3_RXNEMPTY), MP_ROM_INT(0x008) },
 };
 static MP_DEFINE_CONST_DICT(rp2_pio_locals_dict, rp2_pio_locals_dict_table);
 
@@ -876,14 +904,7 @@ static mp_obj_t rp2_state_machine_irq(size_t n_args, const mp_obj_t *pos_args, m
                         ((trigger & 4) ? 0x010 : 0) |
                         ((trigger & 1) ? 0x100 : 0)) << self->sm;
 
-        self->pio->inte0 &= ~(0x111 << self->sm);
-        if (args[ARG_handler].u_obj != mp_const_none) {
-            self->pio->inte0 |= irq->trigger;
-        }
-
-        if (self->pio->inte0) {
-            irq_set_enabled(self->irq, true);
-        }
+        pio_configure_inte(self->pio);
     }
 
     return MP_OBJ_FROM_PTR(irq);
@@ -900,6 +921,10 @@ static const mp_rom_map_elem_t rp2_state_machine_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_rx_fifo), MP_ROM_PTR(&rp2_state_machine_rx_fifo_obj) },
     { MP_ROM_QSTR(MP_QSTR_tx_fifo), MP_ROM_PTR(&rp2_state_machine_tx_fifo_obj) },
     { MP_ROM_QSTR(MP_QSTR_irq), MP_ROM_PTR(&rp2_state_machine_irq_obj) },
+
+    { MP_ROM_QSTR(MP_QSTR_IRQ_SM), MP_ROM_INT(0x1)},
+    { MP_ROM_QSTR(MP_QSTR_IRQ_RXNEMPTY), MP_ROM_INT(0x2)},
+    { MP_ROM_QSTR(MP_QSTR_IRQ_TXNFULL), MP_ROM_INT(0x4)},
 };
 static MP_DEFINE_CONST_DICT(rp2_state_machine_locals_dict, rp2_state_machine_locals_dict_table);
 
