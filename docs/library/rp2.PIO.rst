@@ -53,7 +53,7 @@ Methods
     >>> rp2.PIO(1).state_machine(3)
     StateMachine(7)
 
-.. method:: PIO.irq(handler=None, trigger=IRQ_SM0|IRQ_SM1|IRQ_SM2|IRQ_SM3, hard=False)
+.. method:: PIO.irq(handler=None, trigger=IRQ_SMx|IRQ_SMx_TXNFULL|IRQ_SMx_RXNEMPTY, hard=False)
 
     Returns the IRQ object for this PIO instance.
 
@@ -61,6 +61,19 @@ Methods
 
     Optionally configure it.
 
+        - *handler* is the handler callback function. It must accept a single
+          argument, which is passed the `PIO` instance.  The handler can 
+          retrieve the IRQ(s) that triggered with `pio.irq().flags()`.
+
+          Set `handler=None` to disable.
+
+        - *trigger* is the mask of interrupts that should trigger the handler.
+          For example, to trigger on the `SM0` `irq()` instruction interrupt
+          and the `SM1_RXNEMPTY` interrupt, set `trigger=PIO.IRQ_SM0|PIO.IRQ_SM1_RXNEMPTY`.
+          The default is `PIO.IRQ_SM0|PIO.IRQ_SM1|PIO.IRQ_SM2|PIO.IRQ_SM3`.
+
+        - *hard* controls whether the handler should be called from interrupt
+          context (a hard interrupt), or queued as a soft interrupt.
 
 Constants
 ---------
@@ -89,6 +102,16 @@ Constants
           PIO.IRQ_SM1
           PIO.IRQ_SM2
           PIO.IRQ_SM3
+          PIO.IRQ_SM0_RXNEMPTY
+          PIO.IRQ_SM1_RXNEMPTY
+          PIO.IRQ_SM2_RXNEMPTY
+          PIO.IRQ_SM3_RXNEMPTY
+          PIO.IRQ_SM0_TXNFULL
+          PIO.IRQ_SM1_TXNFULL
+          PIO.IRQ_SM2_TXNFULL
+          PIO.IRQ_SM3_TXNFULL
 
     These constants are used for the *trigger* argument to `PIO.irq`.
+    to trigger the handler on more than one trigger, the constants can
+    be combined using the bitwise or operator `|`.
 

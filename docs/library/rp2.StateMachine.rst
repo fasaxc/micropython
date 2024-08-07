@@ -134,11 +134,45 @@ Methods
     Useful for checking if there is space to push another word using
     `StateMachine.put()`.
 
-.. method:: StateMachine.irq(handler=None, trigger=0|1, hard=False)
+.. method:: StateMachine.irq(handler=None, trigger=StateMachine.IRQ_SM, hard=False)
 
-     Returns the IRQ object for the given StateMachine.
+    Returns the IRQ object for this `StateMachine`` instance.
 
-     Optionally configure it.
+    MicroPython only uses IRQ 0 on each PIO instance. IRQ 1 is not available.
+
+    Optionally configure it.
+
+        - *handler* is the handler callback function. It must accept a single
+          argument, which is passed the `StateMachine` instance.  The handler can 
+          retrieve the IRQ(s) that triggered with `sm.irq().flags()`.
+
+          Set `handler=None` to disable.
+
+        - *trigger* is the mask of interrupts that should trigger the handler.
+          This should be the bitwise-or formed from the `StateMachine.IRQ_...`
+          constants.  The default trigger is `StateMachine.IRQ_SM`.
+
+        - *hard* controls whether the handler should be called from interrupt
+          context (a hard interrupt), or queued as a soft interrupt.
+
+Constants
+---------
+
+
+.. data:: StateMachine.IRQ_SM
+          StateMachine.IRQ_RXNEMPTY
+          StateMachine.IRQ_TXNFULL
+
+    These constants are used for the *trigger* argument to `StateMachine.irq`.
+    to trigger the handler on more than one trigger, the constants can
+    be combined using the bitwise or operator `|`.  `IRQ_SM` responds to the
+    numbered interrupt trigger for this `StateMachine` (the `irq()` PIO 
+    instruction); the interrupt is cleared automatically. `IRQ_RXNEMPTY` 
+    is triggered when the RX queue is not empty; to clear the interrupt, 
+    all items must be drained from the queue. `IRQ_TXNFULL` is triggered 
+    when the TX queue is not full; to clear the interrupt, the queue must 
+    be filled.
+
 
 Buffer protocol
 ---------------
